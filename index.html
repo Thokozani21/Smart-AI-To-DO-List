@@ -1,0 +1,326 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Smart AI To-Do List</title>
+  <style>
+    :root{--bg:#0f1724;--card:#0b1220;--muted:#94a3b8;--accent:#60a5fa;--good:#10b981;--warn:#f97316;--danger:#ef4444}
+    *{box-sizing:border-box;font-family:Inter,ui-sans-serif,system-ui,Segoe UI,Roboto,'Helvetica Neue',Arial}
+    body{margin:0;background:linear-gradient(180deg,#071026 0%,#071a2b 100%);color:#e6eef8;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}
+    .app{width:100%;max-width:1100px;background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));border-radius:14px;box-shadow:0 10px 30px rgba(2,6,23,0.6);overflow:hidden;display:grid;grid-template-columns:420px 1fr}
+    header{padding:18px 22px;background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));display:flex;align-items:center;gap:12px}
+    .brand{display:flex;flex-direction:column}
+    .title{font-weight:700;font-size:18px}
+    .subtitle{font-size:12px;color:var(--muted)}
+    .sidebar{padding:18px 18px;border-right:1px solid rgba(255,255,255,0.03);min-height:520px}
+    .add-block{display:flex;gap:8px;align-items:center}
+    input[type=text]{flex:1;padding:10px 12px;border-radius:10px;border:1px solid rgba(255,255,255,0.04);background:transparent;color:inherit}
+    button{background:var(--accent);border:none;padding:10px 12px;border-radius:10px;color:#021025;font-weight:600;cursor:pointer}
+    .hint{font-size:12px;color:var(--muted);margin-top:8px}
+    .filters{display:flex;gap:8px;margin-top:16px}
+    .chip{padding:8px 10px;border-radius:999px;background:rgba(255,255,255,0.02);font-size:13px;color:var(--muted);cursor:pointer}
+    .chip.active{background:rgba(96,165,250,0.12);color:var(--accent)}
+    .list{margin-top:18px;max-height:420px;overflow:auto;padding-right:6px}
+    .task{display:flex;align-items:center;gap:10px;background:linear-gradient(180deg, rgba(255,255,255,0.01), rgba(255,255,255,0.00));padding:10px;border-radius:10px;margin-bottom:10px}
+    .task .left{flex:1}
+    .task h4{margin:0;font-size:14px}
+    .meta{font-size:12px;color:var(--muted);margin-top:6px;display:flex;justify-content:space-between;align-items:center}
+    .priority{padding:6px 8px;border-radius:8px;font-weight:700;font-size:12px}
+    .priority.high{background:rgba(239,68,68,0.12);color:var(--danger)}
+    .priority.med{background:rgba(249,115,22,0.08);color:var(--warn)}
+    .priority.low{background:rgba(16,185,129,0.06);color:var(--good)}
+    .main{padding:18px}
+    .controls{display:flex;gap:8px;align-items:center}
+    .panel{background:linear-gradient(180deg, rgba(255,255,255,0.01), rgba(255,255,255,0.00));padding:12px;border-radius:10px}
+    .dashboard{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+    .chart{height:150px;display:flex;align-items:center;justify-content:center;color:var(--muted)}
+    .list-main{margin-top:12px}
+    .task-row{display:flex;align-items:center;justify-content:space-between;padding:10px;border-radius:8px;margin-bottom:8px;background:rgba(255,255,255,0.01)}
+    .small{font-size:13px;color:var(--muted)}
+    .actions button{background:transparent;border:none;color:var(--muted);cursor:pointer;padding:6px}
+    footer{margin-top:12px;color:var(--muted);font-size:13px}
+    .badge{display:inline-block;padding:6px 8px;border-radius:10px;background:rgba(255,255,255,0.02);font-weight:600}
+    @media(max-width:900px){.app{grid-template-columns:1fr}.sidebar{order:2}.main{order:1}}
+    @keyframes flash{0%,100%{opacity:1}50%{opacity:0.2}}
+    .countdown{font-weight:700}
+    .urgent{color:var(--danger)}
+  </style>
+</head>
+<body>
+  <audio id="alertSound" src="https://actions.google.com/sounds/v1/alarms/alarm_clock.ogg" preload="auto"></audio>
+  <div class="app" role="application">
+    <div class="sidebar">
+      <header>
+        <div class="brand">
+          <div class="title">Smart AI To-Do</div>
+          <div class="subtitle">AI-powered task prioritization & insights</div>
+        </div>
+      </header>
+
+      <div class="add-block">
+        <input id="taskInput" type="text" placeholder="Add task (e.g. 'Finish report by Friday 3pm')" aria-label="Task input" />
+        <button id="addBtn">Add</button>
+      </div>
+      <div class="hint">You can type natural language deadlines (today, tomorrow, Fri, 5pm, in 2 days)</div>
+
+      <div class="filters" aria-hidden="false">
+        <div class="chip active" data-filter="all">All</div>
+        <div class="chip" data-filter="high">High</div>
+        <div class="chip" data-filter="med">Medium</div>
+        <div class="chip" data-filter="low">Low</div>
+      </div>
+
+      <div class="list" id="taskList" aria-live="polite"></div>
+
+      <footer>
+        <div class="small">Storage: <span id="storageStatus">local</span></div>
+        <div style="margin-top:8px"><small class="small">Tip: Allow browser notifications to receive reminders.</small></div>
+      </footer>
+    </div>
+
+    <main class="main">
+      <div class="controls" style="justify-content:space-between;align-items:flex-start">
+        <div style="display:flex;flex-direction:column">
+          <h3 style="margin:0">Dashboard</h3>
+          <div class="small">Quick overview & productivity insights</div>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <div class="panel badge" id="statsCompleted">Completed: 0</div>
+          <div class="panel badge" id="statsPending">Pending: 0</div>
+          <button id="exportBtn" class="panel">Export</button>
+          <button id="clearBtn" class="panel">Clear All</button>
+        </div>
+      </div>
+
+      <div style="margin-top:12px" class="dashboard">
+        <div class="panel">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <strong>Activity</strong>
+            <small class="small">Last 30 days</small>
+          </div>
+          <div id="activityChart" class="chart">(activity chart)</div>
+        </div>
+        <div class="panel">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <strong>Productivity</strong>
+            <small class="small">Peak hour</small>
+          </div>
+          <div id="peakHour" class="chart">(peak hour)</div>
+        </div>
+      </div>
+
+      <div class="list-main">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <strong>All Tasks</strong>
+          <div class="small">Double-click a task to edit</div>
+        </div>
+        <div id="mainTaskRows"></div>
+      </div>
+
+      <div style="margin-top:8px" class="small">Notes: This demo includes NLP heuristics, prioritization by deadline, local persistence, browser reminders, countdown timers & alarms.</div>
+    </main>
+  </div>
+
+<script>
+const STORAGE_KEY = 'smart_todo_v1';
+const reminderTimers = new Map();
+const ALERT_SOUND = document.getElementById('alertSound');
+
+function toJohannesburg(d){ return new Date(d.toLocaleString('en-US',{timeZone:'Africa/Johannesburg'})); }
+
+function parseDateFromText(text){
+  const now = toJohannesburg(new Date());
+  const lower = text.toLowerCase();
+  let match = lower.match(/in\s+(\d+)\s*(day|days|d)/);
+  if(match){ const d=new Date(now); d.setDate(d.getDate()+parseInt(match[1])); d.setHours(18,0,0,0); return d; }
+  match = lower.match(/in\s+(\d+)\s*(hour|hours|hr|hrs)/);
+  if(match){ const d=new Date(now); d.setHours(d.getHours()+parseInt(match[1])); return d; }
+  if(/today\b/.test(lower)){ const d=new Date(now); d.setHours(18,0,0,0); return d; }
+  if(/tomorrow\b/.test(lower)){ const d=new Date(now); d.setDate(d.getDate()+1); d.setHours(18,0,0,0); return d; }
+  const weekdays=['sun','mon','tue','wed','thu','fri','sat'];
+  for(let i=0;i<weekdays.length;i++){
+    const regex=new RegExp('\\b'+weekdays[i]+'(day)?\\b');
+    if(regex.test(lower)){
+      const d=new Date(now);
+      const diff=(i - d.getDay() +7)%7||7; d.setDate(d.getDate()+diff); d.setHours(17,0,0,0); return d;
+    }
+  }
+  const tm = lower.match(/(\d{1,2})(?::(\d{2}))?\s*(am|pm)?/);
+  if(tm){ let hh=parseInt(tm[1]); const mm=tm[2]?parseInt(tm[2]):0; const ampm=tm[3]; if(ampm){ if(ampm==='pm'&&hh<12) hh+=12; if(ampm==='am'&&hh===12) hh=0; } const d=new Date(now); d.setHours(hh,mm,0,0); if(d<now)d.setDate(d.getDate()+1); return d; }
+  return null;
+}
+
+function computePriority(task){
+  if(task.priorityOverride) return task.priorityOverride;
+  if(!task.due) return 'low';
+  const diffDays=(task.due-new Date())/(1000*60*60*24);
+  if(diffDays<=0.5) return 'high';
+  if(diffDays<=3) return 'med';
+  return 'low';
+}
+
+function suggestReminder(dueDate){
+  if(!dueDate) return null;
+  const d=new Date(dueDate); const now=new Date();
+  const diff = d-now;
+  if(diff<=1000*60*60*2) return new Date(now.getTime()+10000);
+  const rem=new Date(d.getTime()-1000*60*60); return rem>now?rem:now;
+}
+
+function load(){ try{return JSON.parse(localStorage.getItem(STORAGE_KEY))||{tasks:[],stats:{}};}catch(e){return {tasks:[],stats:{}};} }
+function save(state){ localStorage.setItem(STORAGE_KEY,JSON.stringify(state)); }
+
+function scheduleReminder(task){ 
+  if(!task.reminderAt) return; 
+  const now=Date.now(); const then=new Date(task.reminderAt).getTime(); 
+  const delay = then-now; if(delay<=0) return; 
+  if(reminderTimers.has(task.id)) clearTimeout(reminderTimers.get(task.id));
+  const t=setTimeout(()=>{ showTaskAlert(task); reminderTimers.delete(task.id); }, delay);
+  reminderTimers.set(task.id,t);
+}
+
+function showTaskAlert(task){
+  const title = task.title||'Task reminder';
+  const body = task.due?`Due: ${toJohannesburg(new Date(task.due)).toLocaleString('en-ZA')}`:'You have a task scheduled.';
+  if(window.Notification && Notification.permission==='granted'){ new Notification(title,{body}); }
+
+  const popup = document.createElement('div');
+  popup.textContent = `${title} - ${body}`;
+  popup.style.position='fixed';
+  popup.style.bottom='20px';
+  popup.style.right='20px';
+  popup.style.backgroundColor='rgba(239,68,68,0.9)';
+  popup.style.color='white';
+  popup.style.padding='12px 18px';
+  popup.style.borderRadius='8px';
+  popup.style.zIndex='9999';
+  popup.style.fontWeight='700';
+  popup.style.animation='flash 1s infinite';
+  document.body.appendChild(popup);
+  setTimeout(()=>{ document.body.removeChild(popup); },15000);
+
+  ALERT_SOUND.play().catch(()=>console.log('Audio play prevented by browser policy.'));
+}
+
+// --- STATE ---
+const state=load(); state.tasks=state.tasks||[];
+state.tasks.forEach(t=>{ if(t.due) t.due=new Date(t.due); if(t.completedAt) t.completedAt=new Date(t.completedAt); if(t.reminderAt) t.reminderAt=new Date(t.reminderAt); });
+
+const taskInput=document.getElementById('taskInput'),
+      addBtn=document.getElementById('addBtn'),
+      taskList=document.getElementById('taskList'),
+      mainTaskRows=document.getElementById('mainTaskRows'),
+      statsCompleted=document.getElementById('statsCompleted'),
+      statsPending=document.getElementById('statsPending'),
+      exportBtn=document.getElementById('exportBtn'),
+      clearBtn=document.getElementById('clearBtn');
+
+function score(task){ const p=computePriority(task); return (p==='high'?3:p==='med'?2:1)+(task.done?-5:0); }
+
+function render(){
+  const filter=document.querySelector('.chip.active')?.dataset.filter||'all';
+  taskList.innerHTML=''; 
+  state.tasks.slice().sort((a,b)=>score(b)-score(a)).forEach(t=>{
+    const pri=computePriority(t);
+    if(filter!=='all' && pri!==filter) return;
+    const el=document.createElement('div'); el.className='task';
+    const left=document.createElement('div'); left.className='left';
+    const h=document.createElement('h4'); h.textContent=t.title; if(t.done) h.style.textDecoration='line-through';
+    const meta=document.createElement('div'); meta.className='meta'; meta.id='meta-'+t.id;
+    left.appendChild(h); left.appendChild(meta);
+    const priEl=document.createElement('div'); priEl.className='priority '+(pri==='high'?'high':pri==='med'?'med':'low'); priEl.textContent=pri.toUpperCase();
+    const right=document.createElement('div'); right.style.display='flex'; right.style.flexDirection='column'; right.style.gap='8px';
+    const chk=document.createElement('input'); chk.type='checkbox'; chk.checked=!!t.done; chk.title='Mark done';
+    chk.addEventListener('change',()=>{ t.done=chk.checked; t.completedAt=t.done?new Date():null; save(state); render(); updateStats(); updateCharts(); });
+    const actions=document.createElement('div'); actions.className='actions';
+    const editBtn=document.createElement('button'); editBtn.innerHTML='✏️'; editBtn.title='Edit'; editBtn.addEventListener('click',()=>editTask(t.id));
+    const delBtn=document.createElement('button'); delBtn.innerHTML='🗑️'; delBtn.title='Delete'; delBtn.addEventListener('click',()=>{ if(confirm('Delete task?')){ state.tasks=state.tasks.filter(x=>x.id!==t.id); save(state); render(); updateStats(); updateCharts(); }});
+    actions.appendChild(editBtn); actions.appendChild(delBtn);
+    right.appendChild(chk); right.appendChild(priEl); right.appendChild(actions);
+    el.appendChild(left); el.appendChild(right); taskList.appendChild(el);
+  });
+
+  mainTaskRows.innerHTML='';
+  state.tasks.slice().sort((a,b)=>new Date(a.created)-new Date(b.created)).forEach(t=>{
+    const row=document.createElement('div'); row.className='task-row';
+    const left=document.createElement('div'); 
+    left.innerHTML=`<div style="font-weight:700">${t.title}</div>`;
+    const countdown = document.createElement('span'); countdown.id='countdown-'+t.id; countdown.className='countdown';
+    left.appendChild(countdown);
+    const right=document.createElement('div'); right.style.display='flex'; right.style.alignItems='center'; right.style.gap='8px';
+    const pri=document.createElement('div'); pri.className='priority '+(computePriority(t)==='high'?'high':computePriority(t)==='med'?'med':'low'); pri.textContent=computePriority(t).toUpperCase();
+    right.appendChild(pri);
+    const btns=document.createElement('div'); btns.className='actions';
+    const editBtn=document.createElement('button'); editBtn.textContent='Edit'; editBtn.addEventListener('click',()=>editTask(t.id));
+    const delBtn=document.createElement('button'); delBtn.textContent='Del'; delBtn.addEventListener('click',()=>{ state.tasks=state.tasks.filter(x=>x.id!==t.id); save(state); render(); updateStats(); updateCharts(); });
+    btns.appendChild(editBtn); btns.appendChild(delBtn); right.appendChild(btns);
+    row.appendChild(left); row.appendChild(right); mainTaskRows.appendChild(row);
+  });
+  updateStats(); updateCharts();
+}
+
+function updateStats(){
+  const completed=state.tasks.filter(t=>t.done).length;
+  const pending=state.tasks.filter(t=>!t.done).length;
+  statsCompleted.textContent='Completed: '+completed;
+  statsPending.textContent='Pending: '+pending;
+}
+
+function updateCharts(){
+  const ac=document.getElementById('activityChart');
+  const ph=document.getElementById('peakHour');
+  const hours=Array(24).fill(0);
+  state.tasks.forEach(t=>{ if(t.completedAt){ const h=new Date(t.completedAt).getHours(); hours[h]++; }});
+  ac.textContent=hours.join(' ');
+  const peak=Math.max(...hours); ph.textContent='Peak: '+hours.indexOf(peak)+'h';
+}
+
+function addTask(title){
+  if(!title.trim()) return;
+  const due=parseDateFromText(title);
+  const task={id:Date.now(),title,due,done:false,created:new Date(),category:null,completedAt:null,priorityOverride:null,reminderAt:suggestReminder(due)};
+  state.tasks.push(task); save(state); scheduleReminder(task); render();
+}
+
+addBtn.addEventListener('click',()=>{ addTask(taskInput.value); taskInput.value=''; });
+taskInput.addEventListener('keydown',e=>{ if(e.key==='Enter'){ addTask(taskInput.value); taskInput.value=''; }});
+
+document.querySelectorAll('.chip').forEach(c=>c.addEventListener('click',()=>{
+  document.querySelectorAll('.chip').forEach(x=>x.classList.remove('active'));
+  c.classList.add('active'); render();
+}));
+
+exportBtn.addEventListener('click',()=>{ const data=JSON.stringify(state.tasks,null,2); const blob=new Blob([data],{type:'application/json'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='tasks_export.json'; a.click(); URL.revokeObjectURL(url); });
+
+clearBtn.addEventListener('click',()=>{ if(confirm('Clear all tasks?')){ state.tasks=[]; save(state); render(); }});
+
+function editTask(id){ const task=state.tasks.find(t=>t.id===id); if(!task) return; const newTitle=prompt('Edit task title:',task.title); if(newTitle){ task.title=newTitle; task.due=parseDateFromText(newTitle); task.reminderAt=suggestReminder(task.due); save(state); render(); } }
+
+if(window.Notification && Notification.permission!=='granted'){ Notification.requestPermission(); }
+
+state.tasks.forEach(scheduleReminder);
+
+function updateCountdowns(){
+  const now=toJohannesburg(new Date());
+  state.tasks.forEach(t=>{
+    const el=document.getElementById('countdown-'+t.id);
+    if(!el) return;
+    if(!t.due){ el.textContent='No deadline'; el.classList.remove('urgent'); return; }
+    const diff=t.due-now;
+    if(diff<=0 && !t.done){ showTaskAlert(t); t.done=true; t.completedAt=new Date(); save(state); render(); }
+    else{
+      const hrs=Math.floor(diff/3600000);
+      const mins=Math.floor((diff%3600000)/60000);
+      const secs=Math.floor((diff%60000)/1000);
+      el.textContent=`${hrs}h ${mins}m ${secs}s`;
+      if(diff<3600000) el.classList.add('urgent'); else el.classList.remove('urgent');
+    }
+  });
+}
+setInterval(updateCountdowns,1000);
+
+render();
+</script>
+</body>
+</html>
